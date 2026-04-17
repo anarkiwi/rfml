@@ -21,18 +21,18 @@ SIGMF_DTYPE_MAP = {
     "cf64_le": np.dtype("<f8"),
     "ci32_le": np.dtype("<i4"),
     "ci16_le": np.dtype("<i2"),
-    "ci8":     np.dtype("int8"),
+    "ci8": np.dtype("int8"),
     "cu32_le": np.dtype("<u4"),
     "cu16_le": np.dtype("<u2"),
-    "cu8":     np.dtype("uint8"),
+    "cu8": np.dtype("uint8"),
     "rf32_le": np.dtype("<f4"),
     "rf64_le": np.dtype("<f8"),
     "ri32_le": np.dtype("<i4"),
     "ri16_le": np.dtype("<i2"),
-    "ri8":     np.dtype("int8"),
+    "ri8": np.dtype("int8"),
     "ru32_le": np.dtype("<u4"),
     "ru16_le": np.dtype("<u2"),
-    "ru8":     np.dtype("uint8"),
+    "ru8": np.dtype("uint8"),
 }
 
 
@@ -133,12 +133,16 @@ class SigMFDataset(Dataset):
             class_counts[label_idx] += 1
         return class_counts
 
-    def get_weighted_sampler(self, indices=None) -> torch.utils.data.WeightedRandomSampler:
+    def get_weighted_sampler(
+        self, indices=None
+    ) -> torch.utils.data.WeightedRandomSampler:
         class_counts = self.get_class_counts(indices)
         weight = 1.0 / np.array(list(class_counts.values()))
         samples_weight = np.array([weight[t] for t, _ in self.get_indices(indices)])
         samples_weight = torch.from_numpy(samples_weight)
-        return torch.utils.data.WeightedRandomSampler(samples_weight, len(samples_weight))
+        return torch.utils.data.WeightedRandomSampler(
+            samples_weight, len(samples_weight)
+        )
 
     def get_data(self, signal_capture: SignalCapture) -> np.ndarray:
         if signal_capture.absolute_path.endswith(".sigmf-data"):
@@ -202,7 +206,9 @@ class SigMFDataset(Dataset):
         sample_size = item_type.itemsize * (
             2 if "c" in meta["global"]["core:datatype"] else 1
         )
-        total_num_samples = os.path.getsize(absolute_file_path) // sample_size  # noqa: F841
+        total_num_samples = (
+            os.path.getsize(absolute_file_path) // sample_size
+        )  # noqa: F841
 
         index: List[Tuple[Any, SignalCapture]] = []
         if len(meta["captures"]) == 1:
@@ -228,7 +234,9 @@ class SigMFDataset(Dataset):
                     subparts = 1
 
                 for i in range(subparts):
-                    sample_start = annotation["core:sample_start"] + i * self.sample_count
+                    sample_start = (
+                        annotation["core:sample_start"] + i * self.sample_count
+                    )
                     capture = SignalCapture(
                         absolute_path=absolute_file_path,
                         num_bytes=sample_size * self.sample_count,

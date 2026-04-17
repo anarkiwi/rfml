@@ -308,7 +308,9 @@ def annotate(
             n_annotations += 1
 
     if not dry_run and n_annotations:
-        data_obj.sigmf_obj.tofile(data_obj.sigmf_meta_filename, skip_validate=True)
+        data_obj.sigmf_obj.tofile(
+            data_obj.sigmf_meta_filename, skip_validate=True, overwrite=True
+        )
         print(
             f"Writing {len(data_obj.sigmf_obj._metadata[data_obj.sigmf_obj.ANNOTATION_KEY])} annotations to {data_obj.sigmf_meta_filename}"
         )

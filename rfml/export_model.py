@@ -1,6 +1,6 @@
 import torch
 from collections import OrderedDict
-from torchsig.models.iq_models.efficientnet.efficientnet import efficientnet_b0
+from rfml.iq_models import efficientnet_b0
 import os
 import argparse
 import subprocess
@@ -46,13 +46,17 @@ def argument_parser():
 
 def convert_model(model_name, checkpoint):
 
-    model_checkpoint = torch.load(checkpoint)
+    model_checkpoint = torch.load(checkpoint, weights_only=False)
     print(f"Loaded model checkpoint from {checkpoint}")
     model_weights = model_checkpoint["state_dict"]
+    # Strip the pytorch-lightning "mdl." prefix added by ExampleNetwork.
     model_weights = OrderedDict(
         (k.removeprefix("mdl."), v) for k, v in model_weights.items()
     )
-    num_classes = len(model_weights["classifier.bias"])
+    # Keys are now "_model.<timm_key>" (from _EfficientNetIQ).
+    # Find the classifier bias regardless of any remaining prefix.
+    classifier_key = next(k for k in model_weights if k.endswith("classifier.bias"))
+    num_classes = len(model_weights[classifier_key])
     print(f"Model has {num_classes} classes")
     if not os.path.exists("weights"):
         os.makedirs("weights")

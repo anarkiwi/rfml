@@ -12,7 +12,6 @@ import torch
 import zstandard
 from torch.utils.data import Dataset
 
-
 # SigMF datatype string → numpy dtype for a single component (I or Q).
 # For complex types (prefix 'c') the raw array is interleaved [I, Q, I, Q, …]
 # and sample_size = itemsize * 2; for real types it is itemsize * 1.

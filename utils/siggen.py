@@ -14,7 +14,6 @@ from gnuradio.fft import window
 from gnuradio import gr
 from scipy.io import wavfile
 
-
 CENTER_FREQ = 100e6
 
 

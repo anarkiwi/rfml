@@ -6,7 +6,6 @@ from tqdm import tqdm
 import rfml.annotation_utils as annotation_utils
 import rfml.data as data_class
 
-
 mavic_globs = [
     "/data/s3_gamutrf/gamutrf-lab-collect/mavic-30db/*.sigmf-meta",
     # "/data/s3_gamutrf/gamutrf-lab-collect/mavic-0db/*.sigmf-meta",

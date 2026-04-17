@@ -6,7 +6,6 @@ from tqdm import tqdm
 import rfml.annotation_utils as annotation_utils
 import rfml.data as data_class
 
-
 data_globs = [
     # "/data/s3_gamutrf/gamutrf-birdseye-field-days/pdx_field_day_2022_05_26/iq_recordings/dji-mini2-0to100m-0deg-5735mhz-lp-50-gain_20p5Msps_craft_flying-1.sigmf-meta"
     # "/data/s3_gamutrf/gamutrf-birdseye-field-days/pdx_field_day_2022_05_26/iq_recordings/dji-mini2-0to100m-0deg-5735mhz-lp-60-gain_20Msps_craft_flying-1.sigmf-meta"

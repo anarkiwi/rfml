@@ -6,7 +6,6 @@ from tqdm import tqdm
 import rfml.annotation_utils as annotation_utils
 import rfml.data as data_class
 
-
 data_globs = {
     # "mini2_video": [
     #     "data/gamutrf/gamutrf-arl/01_30_23/mini2_iq_label/*.sigmf-meta",

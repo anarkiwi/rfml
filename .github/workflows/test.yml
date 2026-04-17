@@ -2,7 +2,7 @@ name: CI Test
 on: [push, pull_request]
 jobs:
   ci-test:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -10,17 +10,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
           virtualenvs-create: true
           virtualenvs-in-project: true
-          version: 1.8.3
+          version: 2.3.3
       - name: Install poetry and dependencies
         # TODO: remove workaround for https://github.com/pytorch/pytorch/issues/100974 once torch upgraded.
         run: |
-          sudo apt-get -yq update && sudo apt-get install -yq libnvidia-compute-535-server nvidia-cuda-dev
+          sudo apt-get -yq update && sudo apt-get install -yq libnvidia-compute-590-server nvidia-cuda-dev
           git submodule init && \
           git submodule update && \
           sed -i "s/torch==[0-9\.]+/torch/g" torchsig/pyproject.toml && \

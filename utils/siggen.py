@@ -14,7 +14,6 @@ from gnuradio.fft import window
 from gnuradio import gr
 from scipy.io import wavfile
 
-
 CENTER_FREQ = 100e6
 
 
@@ -346,7 +345,7 @@ def run_siggen(
                 sigmf.SigMFFile.FLO_KEY: lower_edge,
             },
         )
-        sigmf_meta.tofile(sigmf_meta_filename, skip_validate=True)
+        sigmf_meta.tofile(sigmf_meta_filename, skip_validate=True, overwrite=True)
 
 
 def argument_parser():

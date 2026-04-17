@@ -9,7 +9,6 @@ sys.path.insert(1, os.path.join(sys.path[0], ".."))
 import rfml.annotation_utils as annotation_utils
 import rfml.data as data_class
 
-
 data_globs = {
     "dji_samples": [
         "/home/iqt/lberndt/gamutrf-depoly/data/samples/mavic-30gain/samples_1723144831.684000_2408703998Hz_20480000sps.raw.sigmf-meta",

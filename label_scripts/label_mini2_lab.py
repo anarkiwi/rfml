@@ -6,7 +6,6 @@ from tqdm import tqdm
 import rfml.annotation_utils as annotation_utils
 import rfml.data as data_class
 
-
 data_globs = [
     "/data/s3_gamutrf/gamutrf-arl/01_30_23/mini2/*.zst",
 ]

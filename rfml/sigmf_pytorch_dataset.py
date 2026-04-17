@@ -1,142 +1,165 @@
 # PyTorch dataset from SigMF
 
-import matplotlib.pyplot as plt
-import numpy as np
-
+import dataclasses
 import glob
 import json
 import os
-import zstandard
+from typing import Any, Callable, List, Optional, Tuple, Union
 
-
-from torchsig.utils.types import SignalCapture, SignalDescription, SignalData
-from torchsig.utils.types import SignalCapture, SignalData
-from torchsig.utils.dataset import SignalDataset
-import torchsig.utils.reader as reader
-import torchsig.utils.index as indexer
-from typing import Any, Callable, List, Optional, Tuple, Union, Dict
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import zstandard
+from torch.utils.data import Dataset
+
+# SigMF datatype string → numpy dtype for a single component (I or Q).
+# For complex types (prefix 'c') the raw array is interleaved [I, Q, I, Q, …]
+# and sample_size = itemsize * 2; for real types it is itemsize * 1.
+SIGMF_DTYPE_MAP = {
+    "cf32_le": np.dtype("<f4"),
+    "cf64_le": np.dtype("<f8"),
+    "ci32_le": np.dtype("<i4"),
+    "ci16_le": np.dtype("<i2"),
+    "ci8": np.dtype("int8"),
+    "cu32_le": np.dtype("<u4"),
+    "cu16_le": np.dtype("<u2"),
+    "cu8": np.dtype("uint8"),
+    "rf32_le": np.dtype("<f4"),
+    "rf64_le": np.dtype("<f8"),
+    "ri32_le": np.dtype("<i4"),
+    "ri16_le": np.dtype("<i2"),
+    "ri8": np.dtype("int8"),
+    "ru32_le": np.dtype("<u4"),
+    "ru16_le": np.dtype("<u2"),
+    "ru8": np.dtype("uint8"),
+}
 
 
-def reader_from_zst(signal_capture: SignalCapture) -> SignalData:
-    """
-    Args:
-        signal_capture:
+@dataclasses.dataclass
+class SignalDescription:
+    sample_rate: float = 0.0
+    upper_frequency: float = 0.0
+    lower_frequency: float = 0.0
 
-    Returns:
-        signal_data: SignalData object with meta-data parsed from sigMF file
 
-    """
+@dataclasses.dataclass
+class SignalCapture:
+    absolute_path: str
+    num_bytes: int
+    byte_offset: int
+    item_type: np.dtype
+    is_complex: bool
+    signal_description: SignalDescription = dataclasses.field(
+        default_factory=SignalDescription
+    )
+
+
+def _bytes_to_iq(raw: bytes, item_type: np.dtype, is_complex: bool) -> np.ndarray:
+    arr = np.frombuffer(raw, dtype=item_type)
+    if is_complex:
+        return (arr[0::2] + 1j * arr[1::2]).astype(np.complex64)
+    return arr.astype(np.float32)
+
+
+def reader_from_sigmf(signal_capture: SignalCapture) -> np.ndarray:
+    with open(signal_capture.absolute_path, "rb") as f:
+        f.seek(signal_capture.byte_offset)
+        raw = f.read(signal_capture.num_bytes)
+    return _bytes_to_iq(raw, signal_capture.item_type, signal_capture.is_complex)
+
+
+def _reader_from_zst(signal_capture: SignalCapture) -> np.ndarray:
     with zstandard.ZstdDecompressor().stream_reader(
         open(signal_capture.absolute_path, "rb"), read_across_frames=True
-    ) as file_object:
-        file_object.seek(signal_capture.byte_offset)
-        return SignalData(
-            data=file_object.read(signal_capture.num_bytes),
-            item_type=signal_capture.item_type,
-            data_type=(
-                np.dtype(np.complex128)
-                if signal_capture.is_complex
-                else np.dtype(np.float64)
-            ),
-            signal_description=signal_capture.signal_description,
-        )
+    ) as f:
+        f.seek(signal_capture.byte_offset)
+        raw = f.read(signal_capture.num_bytes)
+    return _bytes_to_iq(raw, signal_capture.item_type, signal_capture.is_complex)
 
 
-class SigMFDataset(SignalDataset):
-    """SigMFDataset is meant to make a mappable (index-able) dataset from
-    a set of annotated sigmf files
+class SigMFDataset(Dataset):
+    """Mappable PyTorch dataset built from annotated SigMF files.
 
     Args:
-        root:
-            Root file path to search recursively for files
-        sample_count:
-            Number of I/Q samples in each example
-        index_filter:
-            Given an index, remove certain elements
-        class_list:
-            List of class names
-        allowed_filetypes:
-            Limit file extensions to the provided list
-        *\\*kwargs:**
-            Keyword arguments
-
+        root: Root path(s) to search recursively for SigMF files.
+        sample_count: Number of IQ samples per example.
+        index_filter: Optional predicate to drop index entries.
+        class_list: Ordered list of class names; extended automatically.
+        allowed_filetypes: File extensions to scan for.
+        only_first_samples: Use only the first ``sample_count`` samples of
+            each annotation rather than splitting into multiple examples.
+        transform: Callable applied to the raw complex numpy array.
+        target_transform: Callable applied to the integer label.
     """
 
     def __init__(
         self,
-        root: str | List[str],
-        sample_count: int = 2048,  # 4096
+        root: Union[str, List[str]],
+        sample_count: int = 2048,
         index_filter: Optional[Callable[[Tuple[Any, SignalCapture]], bool]] = None,
         class_list: Optional[List[str]] = None,
-        allowed_filetypes: Optional[List[str]] = [".sigmf-data", ".sigmf-meta"],
+        allowed_filetypes: Optional[List[str]] = None,
         only_first_samples: bool = True,
-        **kwargs,
+        transform=None,
+        target_transform=None,
+        **_kwargs,
     ):
-        super(SigMFDataset, self).__init__(**kwargs)
+        super().__init__()
+        if allowed_filetypes is None:
+            allowed_filetypes = [".sigmf-data", ".sigmf-meta"]
         self.sample_count = sample_count
         self.allowed_classes = class_list.copy() if class_list else []
         self.class_list = class_list if class_list else []
         self.allowed_filetypes = allowed_filetypes
         self.only_first_samples = only_first_samples
+        self.transform = transform
+        self.target_transform = target_transform
         if isinstance(root, str):
             root = [root]
-        self.index_files = []
+        self.index_files: List[str] = []
         self.index = self.indexer_from_sigmf_annotations(root)
-
         if index_filter:
             self.index = list(filter(index_filter, self.index))
 
     def get_indices(self, indices=None):
         if not indices:
             return self.index
-        else:
-            return map(self.index.__getitem__, indices)
+        return map(self.index.__getitem__, indices)
 
-    def get_class_counts(self, indices=None):
-
+    def get_class_counts(self, indices=None) -> dict:
         class_counts = {idx: 0 for idx in range(len(self.class_list))}
         for label_idx, _ in self.get_indices(indices):
             class_counts[label_idx] += 1
-
         return class_counts
 
-    def get_weighted_sampler(self, indices=None):
-
+    def get_weighted_sampler(
+        self, indices=None
+    ) -> torch.utils.data.WeightedRandomSampler:
         class_counts = self.get_class_counts(indices)
-
         weight = 1.0 / np.array(list(class_counts.values()))
         samples_weight = np.array([weight[t] for t, _ in self.get_indices(indices)])
-
         samples_weight = torch.from_numpy(samples_weight)
-        sampler = torch.utils.data.WeightedRandomSampler(
+        return torch.utils.data.WeightedRandomSampler(
             samples_weight, len(samples_weight)
         )
 
-        return sampler
-
-    def get_data(self, signal_capture: SignalCapture) -> SignalData:
+    def get_data(self, signal_capture: SignalCapture) -> np.ndarray:
         if signal_capture.absolute_path.endswith(".sigmf-data"):
-            return reader.reader_from_sigmf(signal_capture)
-        elif signal_capture.absolute_path.endswith(".zst"):
-            return reader_from_zst(signal_capture)
-        else:
-            raise ValueError(
-                f"Could not read {signal_capture.absolute_path}. Check file type."
-            )
+            return reader_from_sigmf(signal_capture)
+        if signal_capture.absolute_path.endswith(".zst"):
+            return _reader_from_zst(signal_capture)
+        raise ValueError(
+            f"Cannot read {signal_capture.absolute_path}: unsupported file type."
+        )
 
-    def __getitem__(self, item: int) -> Tuple[np.ndarray, Any]:  # type: ignore
+    def __getitem__(self, item: int) -> Tuple[np.ndarray, Any]:
         target, signal_capture = self.index[item]
-        signal_data = self.get_data(signal_capture)
-
+        iq_data = self.get_data(signal_capture)
         if self.transform:
-            signal_data = self.transform(signal_data)
-
+            iq_data = self.transform(iq_data)
         if self.target_transform:
             target = self.target_transform(target)
-
-        return signal_data.iq_data, target  # type: ignore
+        return iq_data, target
 
     def __len__(self) -> int:
         return len(self.index)
@@ -144,19 +167,9 @@ class SigMFDataset(SignalDataset):
     def indexer_from_sigmf_annotations(
         self, root: List[str]
     ) -> List[Tuple[Any, SignalCapture]]:
-        """An indexer the reads in the annotations from the sigmf-meta files in the provided directory
-
-        Args:
-            root:
-
-        Returns:
-            index: tuple of label, SignalCapture pairs
-
-        """
         index = []
         for file_type in self.allowed_filetypes:
             for r in root:
-
                 if os.path.isfile(r):
                     file_list = [f"{os.path.splitext(r)[0]}.sigmf-data"]
                 elif os.path.isdir(r):
@@ -164,95 +177,78 @@ class SigMFDataset(SignalDataset):
                         os.path.join(r, "**", "*" + file_type), recursive=True
                     )
                 else:
-                    raise ValueError
+                    raise ValueError(f"Path does not exist: {r}")
                 for f in file_list:
-                    if os.path.isfile(f"{os.path.splitext(f)[0]}.sigmf-meta"):
-                        data_file_name = f"{os.path.splitext(f)[0]}.sigmf-data"
-                        signals = self._parse_sigmf_annotations(data_file_name)
+                    meta_path = f"{os.path.splitext(f)[0]}.sigmf-meta"
+                    if os.path.isfile(meta_path):
+                        data_path = f"{os.path.splitext(f)[0]}.sigmf-data"
+                        signals = self._parse_sigmf_annotations(data_path)
                         if signals:
-                            index = index + signals
+                            index.extend(signals)
         self.index_files = list(set(self.index_files))
         return index
 
     def _get_name_to_idx(self, name: str) -> int:
         try:
-            idx = self.class_list.index(name)
+            return self.class_list.index(name)
         except ValueError:
             print(f"Adding {name} to class list")
             self.class_list.append(name)
-            idx = self.class_list.index(name)
-        return idx
+            return self.class_list.index(name)
 
-    def _parse_sigmf_annotations(self, absolute_file_path: str) -> List[SignalCapture]:
-        """
-        Args:
-            absolute_file_path: absolute file path of sigmf-data file for which to create Captures
-            It will find the associated sigmf-meta file and parse the annotations
-
-        Returns:
-            signal_files:
-
-        """
-
-        meta_file_name = f"{os.path.splitext(absolute_file_path)[0]}.sigmf-meta"
-        meta = json.load(open(meta_file_name, "r"))
-        item_type = indexer.SIGMF_DTYPE_MAP[meta["global"]["core:datatype"]]
+    def _parse_sigmf_annotations(
+        self, absolute_file_path: str
+    ) -> List[Tuple[Any, SignalCapture]]:
+        meta_path = f"{os.path.splitext(absolute_file_path)[0]}.sigmf-meta"
+        meta = json.load(open(meta_path, "r"))
+        item_type = SIGMF_DTYPE_MAP[meta["global"]["core:datatype"]]
         sample_size = item_type.itemsize * (
             2 if "c" in meta["global"]["core:datatype"] else 1
         )
-        total_num_samples = os.path.getsize(absolute_file_path) // sample_size
+        total_num_samples = (
+            os.path.getsize(absolute_file_path) // sample_size
+        )  # noqa: F841
 
-        # It's quite common for there to be only a single "capture" in sigMF
-        index = []
+        index: List[Tuple[Any, SignalCapture]] = []
         if len(meta["captures"]) == 1:
             for annotation in meta["annotations"]:
-
-                label = annotation["core:label"] if "core:label" in annotation else None
-
+                label = annotation.get("core:label")
                 if self.allowed_classes and (label not in self.allowed_classes):
                     continue
-
-                # skip if annotation is smaller then requested sample count
                 if annotation["core:sample_count"] < self.sample_count:
                     continue
 
-                sample_count = self.sample_count  # annotation["core:sample_count"]
                 signal_description = SignalDescription(
-                    sample_rate=meta["global"]["core:sample_rate"],
+                    sample_rate=meta["global"].get("core:sample_rate", 0.0),
                 )
-                signal_description.upper_frequency = annotation["core:freq_upper_edge"]
-                signal_description.lower_frequency = annotation["core:freq_lower_edge"]
-
-                comment = annotation.get("core:comment", None)
-
-                annotation_subparts = int(
-                    annotation["core:sample_count"] / self.sample_count
+                signal_description.upper_frequency = annotation.get(
+                    "core:freq_upper_edge", 0.0
                 )
+                signal_description.lower_frequency = annotation.get(
+                    "core:freq_lower_edge", 0.0
+                )
+
+                subparts = int(annotation["core:sample_count"] / self.sample_count)
                 if self.only_first_samples:
-                    annotation_subparts = 1
+                    subparts = 1
 
-                for i in range(annotation_subparts):
-                    sample_start = annotation["core:sample_start"] + (
-                        i * self.sample_count
+                for i in range(subparts):
+                    sample_start = (
+                        annotation["core:sample_start"] + i * self.sample_count
                     )
-
-                    signal = SignalCapture(
+                    capture = SignalCapture(
                         absolute_path=absolute_file_path,
-                        num_bytes=sample_size * sample_count,
+                        num_bytes=sample_size * self.sample_count,
                         byte_offset=sample_size * sample_start,
                         item_type=item_type,
-                        is_complex=(
-                            True if "c" in meta["global"]["core:datatype"] else False
-                        ),
+                        is_complex="c" in meta["global"]["core:datatype"],
                         signal_description=signal_description,
                     )
-                    index.append((self._get_name_to_idx(label), signal))
+                    index.append((self._get_name_to_idx(label), capture))
 
                 self.index_files.append(absolute_file_path)
-                # print(f"Signal {label}  {signal.num_bytes} {signal.byte_offset} {signal.item_type} {signal.is_complex} ")
         else:
             print(
-                "Not Clear how we should handle the annotations when there is more than one capture"
+                "Not clear how to handle annotations when there is more than one capture"
             )
-        # If there's more than one, we construct a list of captures
         return index

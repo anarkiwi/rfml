@@ -2,13 +2,22 @@
 
 from argparse import ArgumentParser, BooleanOptionalAction
 from rfml.sigmf_pytorch_dataset import SigMFDataset
-from torchsig.utils.visualize import (
-    IQVisualizer,
-    SpectrogramVisualizer,
-    two_channel_to_complex,
+from rfml.visualize import IQVisualizer, SpectrogramVisualizer, plot_confusion_matrix
+from rfml.iq_models import efficientnet_b0, efficientnet_b4  # noqa: F401
+import rfml.transforms as ST
+from rfml.transforms import (
+    Compose,
+    IQImbalance,
+    Normalize,
+    RandomApply,
+    RandomFrequencyShift,
+    RandomPhaseShift,
+    RandomResample,
+    RandomTimeShift,
+    RayleighFadingChannel,
+    TargetSNR,
+    ComplexTo2D,
 )
-from torchsig.utils.dataset import SignalDataset
-from torchsig.datasets.sig53 import Sig53
 from torch.utils.data import DataLoader
 import matplotlib
 
@@ -22,13 +31,6 @@ import os
 import json
 from pathlib import Path
 
-from torchsig.models.iq_models.efficientnet.efficientnet import (
-    efficientnet_b0,
-    efficientnet_b4,
-)
-
-# from lightning.pytorch.callbacks import DeviceStatsMonitor
-from torchsig.utils.cm_plotter import plot_confusion_matrix
 from pytorch_lightning.callbacks import ModelCheckpoint, DeviceStatsMonitor
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -36,34 +38,17 @@ from pytorch_lightning import Trainer
 from scipy import signal as sp
 
 from sklearn.metrics import classification_report
-from torchsig.datasets.sig53 import Sig53
 from torch.utils.data import DataLoader
 from matplotlib import pyplot as plt
 from torch import optim
 from tqdm import tqdm
 import torch.nn.functional as F
-import torchsig.transforms as ST
 import numpy as np
-import torchsig
 import torch
 import os
 from rfml.sigmf_pytorch_dataset import SigMFDataset
 from rfml.models import ExampleNetwork, SimpleRealNet
 from rfml.export_model import *
-
-from torchsig.transforms import (
-    Compose,
-    IQImbalance,
-    Normalize,
-    RandomApply,
-    RandomFrequencyShift,
-    RandomPhaseShift,
-    RandomResample,
-    RandomTimeShift,
-    RayleighFadingChannel,
-    TargetSNR,
-    ComplexTo2D,
-)
 
 
 def train_iq(
@@ -336,7 +321,9 @@ def train_iq(
 
     # Load best checkpoint
     checkpoint = torch.load(
-        checkpoint_callback.best_model_path, map_location=lambda storage, loc: storage
+        checkpoint_callback.best_model_path,
+        map_location=lambda storage, loc: storage,
+        weights_only=False,
     )
     example_model.load_state_dict(checkpoint["state_dict"], strict=False)
     example_model = example_model.eval()

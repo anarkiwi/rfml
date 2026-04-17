@@ -6,32 +6,34 @@ authors = ["Lucas Tindall <ltindall@ucsd.edu>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.10, <3.12"
-scikit-image = "^0.24.0"
-matplotlib = "^3.8.3"
-numpy = "^1.26.4"
+python = ">=3.11, <3.13"
+scikit-image = ">0.24.0"
+matplotlib = ">3.8.3"
+numpy = ">2.0.0"
 opencv-python = "^4.8.0.74"
-scipy = "1.13.1"
-zstandard = "^0.23.0"
-pyyaml = "^6.0.1"
-pillow = "^11.0.0"
-python-on-whales = "^0.73.0"
-sigmf = "^1.2.0"
-tqdm = "^4.66.4"
+scipy = ">1.13.1"
+zstandard = ">0.23.0"
+pyyaml = ">6.0.1"
+pillow = ">11.0.0"
+python-on-whales = ">0.73.0"
+sigmf = "^1.8.0"
+tqdm = ">4.66.4"
 torch = "2.4.1"
 torchvision = "0.19.1"
 torch-model-archiver = "^0.12.0"
-torchsig = {path = "torchsig"}
-cupy-cuda11x = "13.3.0"
-ultralytics = "^8.2.79"
+timm = "^1.0"
+torchsig = { path = "torchsig", develop = true }
+scikit-learn = "^1.0"
+cupy-cuda12x = ">14.0.0"
+ultralytics = ">8.2.79"
 
 
 [tool.poetry.group.dev.dependencies]
-jupyter = "^1.0.0"
-ipykernel = "^6.29.3"
-black = "24.10.0"
-tensorboard = "^2.17.1"
-seaborn = "^0.13.2"
+jupyter = ">1.0.0"
+ipykernel = ">6.29.3"
+black = ">24.10.0"
+tensorboard = ">2.17.1"
+seaborn = ">=0.13.2"
 
 [build-system]
 requires = ["poetry-core"]
